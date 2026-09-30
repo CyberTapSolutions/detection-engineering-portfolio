@@ -1,0 +1,77 @@
+// DET-001: Password Spraying
+// Phase: Baseline Analysis
+// Data Source: Microsoft Entra ID Sign-in Logs
+// Table: SigninLogs
+//
+// Purpose:
+// Establish normal authentication behavior before developing
+// or tuning password spraying detection thresholds.
+
+// ------------------------------------------------------------
+// 1. Inspect recent authentication events
+// ------------------------------------------------------------
+
+SigninLogs
+| where TimeGenerated > ago(24h)
+| project
+    TimeGenerated,
+    UserPrincipalName,
+    IPAddress,
+    AppDisplayName,
+    ResultType,
+    ResultDescription
+| sort by TimeGenerated desc
+| take 50
+
+
+// ------------------------------------------------------------
+// 2. Authentication volume
+// ------------------------------------------------------------
+
+SigninLogs
+| where TimeGenerated > ago(24h)
+| summarize
+    TotalSignIns = count(),
+    SuccessfulSignIns = countif(ResultType == "0"),
+    FailedSignIns = countif(ResultType != "0")
+
+
+// ------------------------------------------------------------
+// 3. Failed authentication attempts by source IP
+// ------------------------------------------------------------
+
+SigninLogs
+| where TimeGenerated > ago(24h)
+| where ResultType != "0"
+| summarize
+    FailedAttempts = count()
+    by IPAddress
+| order by FailedAttempts desc
+
+
+// ------------------------------------------------------------
+// 4. Distinct accounts targeted by source IP
+// ------------------------------------------------------------
+
+SigninLogs
+| where TimeGenerated > ago(24h)
+| where ResultType != "0"
+| summarize
+    FailedAttempts = count(),
+    TargetedAccounts = dcount(UserPrincipalName)
+    by IPAddress
+| order by TargetedAccounts desc
+
+
+// ------------------------------------------------------------
+// 5. Authentication activity over time
+// ------------------------------------------------------------
+
+SigninLogs
+| where TimeGenerated > ago(24h)
+| summarize
+    TotalSignIns = count(),
+    SuccessfulSignIns = countif(ResultType == "0"),
+    FailedSignIns = countif(ResultType != "0")
+    by bin(TimeGenerated, 15m)
+| order by TimeGenerated asc
